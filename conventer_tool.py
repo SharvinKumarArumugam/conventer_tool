@@ -1,79 +1,84 @@
+import streamlit as st
 from pdf2docx import Converter
 from docx import Document
 from reportlab.pdfgen import canvas
 import img2pdf
-import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox
+from io import BytesIO
+import os
+import tempfile
 
-# Setup Tkinter root
-root = tk.Tk()
-root.withdraw()  # Hide the main window
+st.set_page_config(page_title="Document Converter", layout="centered")
 
-# Function to convert PDF to Word
-def convert_pdf_to_word():
-    pdf_file = filedialog.askopenfilename(title="Select PDF file", filetypes=[("PDF files", "*.pdf")])
-    if not pdf_file:
-        return
-    word_file = filedialog.asksaveasfilename(title="Save Word file as", defaultextension=".docx", filetypes=[("Word files", "*.docx")])
-    if not word_file:
-        return
-    cv = Converter(pdf_file)
-    cv.convert(word_file, start=0, end=None)
-    cv.close()
-    messagebox.showinfo("Success", f"PDF converted to Word:\n{word_file}")
+st.title("📄 Document Conversion Tool")
 
-# Function to convert Image to PDF
-def convert_image_to_pdf():
-    image_path = filedialog.askopenfilename(title="Select image file", filetypes=[("Image files", "*.jpg *.jpeg *.png")])
-    if not image_path:
-        return
-    output_pdf = filedialog.asksaveasfilename(title="Save PDF as", defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-    if not output_pdf:
-        return
-    with open(output_pdf, "wb") as f:
-        f.write(img2pdf.convert(image_path))
-    messagebox.showinfo("Success", f"Image converted to PDF:\n{output_pdf}")
+menu = st.sidebar.selectbox(
+    "Choose a conversion type:",
+    ["Select Option", "PDF to Word", "Image to PDF", "Word to PDF"]
+)
 
-# Function to convert Word to PDF
-def convert_word_to_pdf():
-    docx_file = filedialog.askopenfilename(title="Select Word file", filetypes=[("Word files", "*.docx")])
-    if not docx_file:
-        return
-    pdf_file = filedialog.asksaveasfilename(title="Save PDF as", defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-    if not pdf_file:
-        return
-    doc = Document(docx_file)
-    c = canvas.Canvas(pdf_file)
-    width, height = c._pagesize
-    y = height - 40
-    for para in doc.paragraphs:
-        text = para.text
-        c.drawString(40, y, text)
-        y -= 15
-        if y <= 40:
-            c.showPage()
-            y = height - 40
-    c.save()
-    messagebox.showinfo("Success", f"Word converted to PDF:\n{pdf_file}")
+def save_temp_file(uploaded_file):
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    temp_file.write(uploaded_file.read())
+    temp_file_path = temp_file.name
+    temp_file.close()
+    return temp_file_path
 
-# Main menu loop
-def main():
-    while True:
-        choice = simpledialog.askinteger(
-            "Document Conversion Menu",
-            "Select a service:\n1. PDF to Word\n2. Image to PDF\n3. Word to PDF\n4. Exit"
-        )
+if menu == "PDF to Word":
+    st.header("Convert PDF to Word")
+    uploaded_pdf = st.file_uploader("Upload a PDF file", type=["pdf"])
+    
+    if uploaded_pdf and st.button("Convert"):
+        pdf_path = save_temp_file(uploaded_pdf)
+        word_output = os.path.splitext(uploaded_pdf.name)[0] + ".docx"
+        word_path = os.path.join(tempfile.gettempdir(), word_output)
 
-        if choice == 1:
-            convert_pdf_to_word()
-        elif choice == 2:
-            convert_image_to_pdf()
-        elif choice == 3:
-            convert_word_to_pdf()
-        elif choice == 4:
-            break
-        else:
-            messagebox.showwarning("Invalid choice", "Please select a valid option (1-4).")
+        cv = Converter(pdf_path)
+        cv.convert(word_path, start=0, end=None)
+        cv.close()
 
-if __name__ == "__main__":
-    main()
+        with open(word_path, "rb") as f:
+            st.success("Conversion successful!")
+            st.download_button("Download Word File", f.read(), file_name=word_output)
+
+elif menu == "Image to PDF":
+    st.header("Convert Image to PDF")
+    uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+    
+    if uploaded_image and st.button("Convert"):
+        image_path = save_temp_file(uploaded_image)
+        output_pdf = os.path.splitext(uploaded_image.name)[0] + ".pdf"
+        pdf_path = os.path.join(tempfile.gettempdir(), output_pdf)
+
+        with open(pdf_path, "wb") as f:
+            f.write(img2pdf.convert(image_path))
+        
+        with open(pdf_path, "rb") as f:
+            st.success("Image successfully converted to PDF!")
+            st.download_button("Download PDF", f.read(), file_name=output_pdf)
+
+elif menu == "Word to PDF":
+    st.header("Convert Word to PDF")
+    uploaded_docx = st.file_uploader("Upload a Word (.docx) file", type=["docx"])
+    
+    if uploaded_docx and st.button("Convert"):
+        docx_path = save_temp_file(uploaded_docx)
+        pdf_output = os.path.splitext(uploaded_docx.name)[0] + ".pdf"
+        pdf_path = os.path.join(tempfile.gettempdir(), pdf_output)
+
+        doc = Document(docx_path)
+        c = canvas.Canvas(pdf_path)
+        width, height = c._pagesize
+        y = height - 40
+
+        for para in doc.paragraphs:
+            text = para.text
+            c.drawString(40, y, text)
+            y -= 15
+            if y <= 40:
+                c.showPage()
+                y = height - 40
+        c.save()
+
+        with open(pdf_path, "rb") as f:
+            st.success("Word successfully converted to PDF!")
+            st.download_button("Download PDF", f.read(), file_name
